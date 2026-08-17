@@ -88,6 +88,26 @@ function dailyBars(rows) {
   return bars;
 }
 
+/** Measured gap between probe runs, so the page never claims a cadence it does not achieve.
+ *
+ * The workflow asks for every 5 minutes, but GitHub's scheduler is best-effort and
+ * in practice delivers far fewer runs. Publishing the requested interval would be a
+ * false claim on a page whose whole purpose is honest measurement, so this reports
+ * what actually happened.
+ */
+function medianIntervalMinutes() {
+  const stamps = [...new Set(samples.map((sample) => sample.t))].sort();
+  if (stamps.length < 3) return null;
+  const gaps = [];
+  for (let i = 1; i < stamps.length; i += 1) {
+    gaps.push((Date.parse(stamps[i]) - Date.parse(stamps[i - 1])) / 60000);
+  }
+  gaps.sort((a, b) => a - b);
+  return Math.round(gaps[Math.floor(gaps.length / 2)]);
+}
+
+const intervalMinutes = medianIntervalMinutes();
+
 const services = config.targets.map((target) => {
   const rows = samples.filter((sample) => sample.id === target.id);
   const latest = rows.length ? rows[rows.length - 1] : null;
@@ -229,8 +249,12 @@ const html = `<title>${escape(config.brand)} Status</title>
   ${servicesHtml}
 
   <footer>
-    <p><strong>How this is measured.</strong> A scheduled job on GitHub's infrastructure requests each public <code>/health</code> endpoint every 5 minutes and records the result. The prober does not run on our servers, so it keeps reporting when our servers stop.</p>
-    <p><strong>Honest limits.</strong> Sampling is every 5 minutes, so an outage shorter than one interval can be missed entirely. Uptime here is "share of successful samples", not a contractual measurement. We publish no uptime SLA today; when we do, it will be backed by this history.</p>
+    <p><strong>How this is measured.</strong> A scheduled job on GitHub's infrastructure requests each public <code>/health</code> endpoint and records the result. The prober does not run on our servers, so it keeps reporting when our servers stop.</p>
+    <p><strong>Honest limits.</strong> ${
+      intervalMinutes === null
+        ? "Sampling interval is still being measured."
+        : `The job asks to run every 5 minutes, but the scheduler is best-effort and the <strong>measured interval is about ${intervalMinutes} minutes</strong> — that figure is calculated from this page's own history, not assumed. An outage shorter than one interval can be missed entirely.`
+    } Uptime here is "share of successful samples", not a contractual measurement. We publish no uptime SLA today; when we do, it will be backed by this history and by finer-grained monitoring than this.</p>
     <p>Recording started ${firstSample ? escape(firstSample.slice(0, 10)) : "today"}. Page rebuilt ${escape(new Date(now).toISOString().replace("T", " ").slice(0, 16))} UTC.</p>
   </footer>
 </div>
