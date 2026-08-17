@@ -1,0 +1,47 @@
+name: probe
+
+# Every 5 minutes is the finest granularity GitHub's scheduler offers, and runs can
+# be delayed under load. That limit is stated on the status page rather than hidden:
+# an outage shorter than one interval can be missed entirely.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# Never let two probes race on the same history file.
+concurrency:
+  group: probe
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Probe endpoints
+        run: node scripts/probe.mjs
+
+      - name: Rebuild status page
+        run: node scripts/build.mjs
+
+      - name: Commit measurement
+        run: |
+          git config user.name "status-probe"
+          git config user.email "status-probe@users.noreply.github.com"
+          git add history docs
+          git diff --cached --quiet && echo "nothing to commit" && exit 0
+          git commit -m "chore: record uptime sample"
+          # Another run may have pushed while this one was probing; rebase and retry.
+          for attempt in 1 2 3; do
+            git push && exit 0
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+          done
+          exit 1
