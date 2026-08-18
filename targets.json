@@ -17,10 +17,9 @@
       "url": "https://portal.iphub.live/"
     },
     {
-      "id": "admin-api",
-      "name": "Admin API",
-      "url": "https://admin-api.iphub.live/health"
-    },
-    { "id": "website", "name": "Website", "url": "https://iphub.live/" }
+      "id": "website",
+      "name": "Website",
+      "url": "https://iphub.live/"
+    }
   ]
 }
